@@ -49,7 +49,7 @@ fi
 
 git checkout "$MAIN_BRANCH"
 # Fetch and prune, then pull latest
-git fetch --prune
+git fetch --prune origin
 git pull --ff-only origin "$MAIN_BRANCH" || {
   echo "Fast-forward pull failed. Attempting rebase..." >&2
   git pull --rebase origin "$MAIN_BRANCH"
@@ -66,14 +66,25 @@ fi
 
 # Optional: also ensure remote branch is gone (in case auto-delete is disabled)
 if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-  echo "Remote still has branch '$BRANCH'. Deleting via GitHub API..."
-  REPO="${GH_REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo '')}"
-  if [ -n "$REPO" ]; then
-    gh api "repos/${REPO}/git/refs/heads/${BRANCH}" -X DELETE || true
-  else
-    echo "Could not determine repo to delete remote branch. Set GH_REPO (e.g., ava-sig/obsidian-importer)." >&2
-  fi
+  echo "Remote still has branch '$BRANCH'. Deleting at origin..."
+  git push origin --delete "$BRANCH" || true
 fi
+
+# Sweep: delete any local branches whose upstream is gone
+echo "Sweeping local branches with missing upstream..."
+for gone in $(git for-each-ref --format='%(refname:short) %(upstream:trackshort)' refs/heads | awk '$2=="[gone]"{print $1}'); do
+  case "$gone" in
+    main|master) ;; # skip protected
+    *) echo " - deleting local branch (upstream gone): $gone"; git branch -D "$gone" || true ;;
+  esac
+done
+
+# Sweep: delete local branches fully merged into the main branch
+echo "Sweeping local branches fully merged into $MAIN_BRANCH..."
+for merged in $(git branch --merged "$MAIN_BRANCH" | sed 's/^..//' | grep -v -E "^(main|master)$"); do
+  echo " - deleting merged local branch: $merged"
+  git branch -d "$merged" || true
+done
 
 # Report status
 echo "Cleanup complete. You are on '$MAIN_BRANCH' with latest changes."

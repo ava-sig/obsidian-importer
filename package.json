@@ -18,6 +18,7 @@
 		"smoke": "bash scripts/smoke-meta.sh",
 		"verify": "npm run lint && npm run build",
 		"prepare": "husky install",
+		"prune": "git fetch --prune origin && git remote prune origin && git for-each-ref --format='%(refname:short) %(upstream:trackshort)' refs/heads | awk '$2==\"[gone]\"{print $1}' | xargs -r -n1 git branch -D",
 		"session:start": "bash scripts/session-start.sh",
 		"session:end": "bash scripts/session-end.sh",
 		"session:merge": "bash scripts/session-merge.sh",
