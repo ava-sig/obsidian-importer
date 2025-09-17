@@ -71,7 +71,7 @@ REPO="${GH_REPO:-ava-sig/obsidian-importer}"
 BASE_BRANCH="$(git remote show origin | sed -n 's/  HEAD branch: //p')"
 if [ -z "$BASE_BRANCH" ]; then BASE_BRANCH="main"; fi
 
-# Ensure we have the latest refs
+# Ensure we have the latest refs (pruning is handled in session-cleanup)
 git fetch origin
 
 # Ensure upstream is set and push latest commits
