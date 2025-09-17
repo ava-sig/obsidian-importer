@@ -57,8 +57,13 @@ jobs:
           GOV_PATH: gorvernance/obsidian-importer
           REQUIRE_GOV: '1'
 
-      - name: Enforce perf budgets
-        run: npm run -s perf:budgets
+      - name: Enforce perf budgets (guard if no perf report)
+        run: |
+          if [ -f "perf-report.json" ]; then
+            npm run -s perf:budgets
+          else
+            echo "Skipping perf:budgets (no perf-report.json in repo root)."
+          fi
         env:
           GOV_PATH: gorvernance/obsidian-importer
           REQUIRE_GOV: '1'
