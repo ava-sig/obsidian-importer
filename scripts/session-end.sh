@@ -60,49 +60,11 @@ else
   git push -u origin "$BRANCH"
 fi
 
-# Compute PR title/body
+# Compute PR title
 TITLE="$(git log -1 --pretty=%s)"
 if [ -z "$TITLE" ]; then
   TITLE="Update: $BRANCH"
 fi
-
-tmpfile="$(mktemp)"
-cat > "$tmpfile" <<'PR_BODY'
-# PR Summary
-
-- What change is introduced?
-- Why is this necessary now?
-- How was this tested?
-
-## Governance
-
-- Glyph(s) referenced:
-  - `SIG-FLD-VAL-001` — Declaration Echoes Return Amplified
-- Contracts impacted (list IDs):
-  - e.g., `SIG-SYS-NOT-027` — Secrets & Privacy
-
-## Downgrade Notes (if any)
-
-If using a legacy or less-preferred path (e.g., Notion legacy DB API instead of Data Sources), explain:
-- Reason for downgrade:
-- Scope and duration:
-- Mitigations and plan to restore alignment:
-
-## Checklist
-
-- [ ] New/changed source files include the glyph header on the first lines:
-
-```ts
-// [SIG-FLD-VAL-001] Declared in posture, amplified in field.
-```
-
-- [ ] Governance checks pass locally (or will pass in CI):
-  - `npm run check:glyph-header`
-  - `npm run ci:pr`
-  - `npm run validate:links`
-  - `npm run perf:budgets`
-  - `npm run fixtures:redact`
-PR_BODY
 
 # --- PR creation (robust) ---
 REPO="${GH_REPO:-ava-sig/obsidian-importer}"
@@ -127,6 +89,71 @@ if [ "$AHEAD_COUNT" -eq 0 ]; then
   rm -f "$tmpfile"
   exit 1
 fi
+
+# Build dynamic PR body
+COMMITS=$(git log --no-decorate --pretty=format:'- %h %s' "origin/${BASE_BRANCH}..HEAD" | sed -e 's/\"/"/g')
+FILES_CHANGED=$(git diff --name-status "origin/${BASE_BRANCH}..HEAD" | sed 's/^/- /')
+DIFF_TEXT=$(git diff "origin/${BASE_BRANCH}..HEAD")
+
+HAS_DS=$(printf "%s" "$DIFF_TEXT" | grep -E "/v1/data_sources/" >/dev/null && echo 1 || echo 0)
+HAS_LEGACY=$(printf "%s" "$DIFF_TEXT" | grep -E "/v1/databases/" >/dev/null && echo 1 || echo 0)
+HAS_RETRY=$(printf "%s" "$DIFF_TEXT" | grep -Ei "retry-after|429|5xx|backoff" >/dev/null && echo 1 || echo 0)
+HAS_SECRET_TOUCH=$(printf "%s" "$DIFF_TEXT" | grep -Ei "authorization|token|redact" >/dev/null && echo 1 || echo 0)
+HAS_ALLOW_LEGACY=$(printf "%s" "$DIFF_TEXT" | grep -E "allowLegacy|downgradeNote" >/dev/null && echo 1 || echo 0)
+
+CONTRACTS=
+if [ "$HAS_SECRET_TOUCH" = 1 ]; then CONTRACTS="$CONTRACTS\n  - SIG-SYS-NOT-027 — Secrets & Privacy"; fi
+if [ "$HAS_RETRY" = 1 ]; then CONTRACTS="$CONTRACTS\n  - SIG-SYS-NOT-018 — Rate Limit & Retry"; fi
+if [ "$HAS_DS" = 1 ] || [ "$HAS_LEGACY" = 1 ]; then CONTRACTS="$CONTRACTS\n  - SIG-SYS-NOT-023 — DS Docs Compliance"; fi
+if [ "$HAS_ALLOW_LEGACY" = 1 ]; then CONTRACTS="$CONTRACTS\n  - SIG-SYS-NOT-032 — Back-Compat (downgrade)"; fi
+if [ -z "$CONTRACTS" ]; then CONTRACTS="\n  - (none detected)"; fi
+
+GLYPH_HEADER_STATUS="[ ]"
+if USE_CACHED=1 npm run -s check:glyph-header >/dev/null 2>&1; then GLYPH_HEADER_STATUS="[x]"; fi
+
+tmpfile="$(mktemp)"
+cat > "$tmpfile" <<PR_BODY
+# PR Summary
+
+- What change is introduced?
+- Why is this necessary now?
+- How was this tested?
+
+## Commits
+${COMMITS}
+
+## Files Changed
+${FILES_CHANGED}
+
+## Governance
+
+- Glyph(s) referenced:
+  - SIG-FLD-VAL-001 — Declaration Echoes Return Amplified
+- Contracts impacted:
+${CONTRACTS}
+
+## Downgrade Notes (if any)
+
+$(
+  if [ "$HAS_LEGACY" = 1 ]; then
+    cat <<'NOTE'
+If using a legacy or less-preferred path (e.g., Notion legacy DB API instead of Data Sources), explain:
+- Reason for downgrade:
+- Scope and duration:
+- Mitigations and plan to restore alignment:
+NOTE
+  else
+    echo "(none)"
+  fi
+)
+
+## Checklist
+
+- ${GLYPH_HEADER_STATUS} New/changed source files include the glyph header on the first lines
+- [x] Tests run locally (see session-end output)
+- [ ] Governance checks will pass in CI
+
+PR_BODY
 
 # Create PR using gh (pre-filled body modeled after template)
 # If PR already exists, this will error; ignore with || true then print status
