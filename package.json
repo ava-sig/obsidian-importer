@@ -7,7 +7,7 @@
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json package.json versions.json",
-		"lint": "eslint src --ext .ts --fix",
+		"lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" \"__tests__/**/*.ts\" --fix",
 		"check:glyph-header": "node scripts/glyph-header-check.js",
 		"ci:pr": "node scripts/run-governance-tool.mjs ts check-pr-body.ts",
 		"validate:links": "node scripts/run-governance-tool.mjs ts validate-link-graph.ts",

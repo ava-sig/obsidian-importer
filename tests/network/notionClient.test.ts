@@ -1,5 +1,5 @@
 // [SIG-FLD-VAL-001] Declared in posture, amplified in field.
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NotionClient } from '../../src/network/notionClient';
 
 // Minimal Headers/Response shims to avoid DOM/undici dependency
@@ -16,11 +16,13 @@ class MockHeaders {
 
 class MockResponse {
 	status: number;
+	statusText: string;
 	headers: MockHeaders;
 	private _body: string;
-	constructor(body: string, init: { status: number, headers?: Record<string, string> }) {
+	constructor(body: string, init: { status: number, statusText?: string, headers?: Record<string, string> }) {
 		this._body = body;
 		this.status = init.status;
+		this.statusText = init.statusText ?? '';
 		this.headers = new MockHeaders(init.headers ?? {});
 	}
 	async text() {
@@ -35,6 +37,9 @@ describe('NotionClient', () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
 	});
+	afterEach(() => {
+		vi.useRealTimers();
+	});
 
 	it('sets Notion-Version header to 2025-09-03', async () => {
 		const spy = vi.spyOn(globalThis as any, 'fetch').mockImplementation(async (_input: any, init?: any) => {
@@ -45,7 +50,7 @@ describe('NotionClient', () => {
 		});
 
 		const client = new NotionClient();
-		const res = await client.request<{ ok: boolean }>({ path: '/v1/data_sources/query', method: 'POST', body: {} });
+		const res = await client.request<{ ok: boolean }>({ path: '/v1/data_sources/ds123/query', method: 'POST', body: {} });
 		expect(res.ok).toBe(true);
 		expect(spy).toHaveBeenCalledTimes(1);
 	});
@@ -60,9 +65,22 @@ describe('NotionClient', () => {
 		});
 
 		const client = new NotionClient({ token });
-		const res = await client.request<{ ok: boolean }>({ path: '/v1/data_sources/query', method: 'POST', body: {} });
+		const res = await client.request<{ ok: boolean }>({ path: '/v1/data_sources/ds123/query', method: 'POST', body: {} });
 		expect(res.ok).toBe(true);
 		expect(spy).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not send Content-Type on GET/HEAD', async () => {
+		const spy = vi.spyOn(globalThis as any, 'fetch').mockImplementation(async (_: any, init?: any) => {
+			const headers = (init?.headers || {}) as Record<string, string>;
+			expect(headers['Content-Type']).toBeUndefined();
+			return new MockResponse('', { status: 204 }) as any;
+		});
+
+		const client = new NotionClient();
+		await client.request<void>({ path: '/v1/pages/page123', method: 'GET' });
+		await client.request<void>({ path: '/v1/pages/page123', method: 'HEAD' });
+		expect(spy).toHaveBeenCalledTimes(2);
 	});
 
 	it('blocks legacy databases endpoints by default', async () => {
@@ -72,7 +90,7 @@ describe('NotionClient', () => {
 
 		const client = new NotionClient();
 		await expect(
-			client.request({ path: '/v1/databases/query', method: 'POST', body: {} })
+			client.request({ path: '/v1/databases/db123/query', method: 'POST', body: {} })
 		).rejects.toThrow(/\[SIG-SYS-NOT-023]/);
 	});
 
@@ -83,7 +101,7 @@ describe('NotionClient', () => {
 		});
 
 		const client = new NotionClient({ allowLegacy: true, downgradeNote: 'Temporary fallback' });
-		const res = await client.request<{ ok: boolean }>({ path: '/v1/databases/query', method: 'POST', body: {} });
+		const res = await client.request<{ ok: boolean }>({ path: '/v1/databases/db123/query', method: 'POST', body: {} });
 		expect(res.ok).toBe(true);
 		expect(spy).toHaveBeenCalledTimes(1);
 	});
