@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ava-sig/governance
-          path: gorvernance/obsidian-importer
+          path: gorvernance
           token: ${{ secrets.GOV_REPO_PAT }}
 
       - name: Glyph header check
@@ -43,25 +43,25 @@ jobs:
       - name: PR body governance check
         run: npm run -s ci:pr
         env:
-          GOV_PATH: gorvernance/obsidian-importer
+          GOV_PATH: gorvernance
           REQUIRE_GOV: '1'
 
       - name: Validate link graph
         run: npm run -s validate:links
         env:
-          GOV_PATH: gorvernance/obsidian-importer
+          GOV_PATH: gorvernance
           REQUIRE_GOV: '1'
 
       - name: Enforce perf budgets
         run: npm run -s perf:budgets
         env:
-          GOV_PATH: gorvernance/obsidian-importer
+          GOV_PATH: gorvernance
           REQUIRE_GOV: '1'
 
       - name: Redact fixtures
         run: npm run -s fixtures:redact
         env:
-          GOV_PATH: gorvernance/obsidian-importer
+          GOV_PATH: gorvernance
           REQUIRE_GOV: '1'
 
   governance_lite:
