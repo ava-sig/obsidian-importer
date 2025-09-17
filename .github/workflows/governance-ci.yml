@@ -38,28 +38,32 @@ jobs:
       - name: Glyph header check
         run: npm run -s check:glyph-header
         env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref || '' }}
 
       - name: PR body governance check
+        if: ${{ secrets.GOV_REPO_PAT != '' }}
         run: npm run -s ci:pr
         env:
           GOV_PATH: gorvernance/obsidian-importer
-          REQUIRE_GOV: ${{ secrets.GOV_REPO_PAT != '' && '1' || '0' }}
+          REQUIRE_GOV: '1'
 
       - name: Validate link graph
+        if: ${{ secrets.GOV_REPO_PAT != '' }}
         run: npm run -s validate:links
         env:
           GOV_PATH: gorvernance/obsidian-importer
-          REQUIRE_GOV: ${{ secrets.GOV_REPO_PAT != '' && '1' || '0' }}
+          REQUIRE_GOV: '1'
 
       - name: Enforce perf budgets
+        if: ${{ secrets.GOV_REPO_PAT != '' }}
         run: npm run -s perf:budgets
         env:
           GOV_PATH: gorvernance/obsidian-importer
-          REQUIRE_GOV: ${{ secrets.GOV_REPO_PAT != '' && '1' || '0' }}
+          REQUIRE_GOV: '1'
 
       - name: Redact fixtures
+        if: ${{ secrets.GOV_REPO_PAT != '' }}
         run: npm run -s fixtures:redact
         env:
           GOV_PATH: gorvernance/obsidian-importer
-          REQUIRE_GOV: ${{ secrets.GOV_REPO_PAT != '' && '1' || '0' }}
+          REQUIRE_GOV: '1'
