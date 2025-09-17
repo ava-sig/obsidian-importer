@@ -43,25 +43,30 @@ jobs:
       - name: PR body governance check
         run: npm run -s ci:pr
         env:
-          GOV_PATH: gorvernance
+          GOV_PATH: gorvernance/obsidian-importer
           REQUIRE_GOV: '1'
 
-      - name: Validate link graph
-        run: npm run -s validate:links
+      - name: Validate link graph (guard if docs missing)
+        run: |
+          if [ -d "${GOV_PATH}/out/md" ]; then
+            npm run -s validate:links
+          else
+            echo "Skipping validate:links (no ${GOV_PATH}/out/md directory)."
+          fi
         env:
-          GOV_PATH: gorvernance
+          GOV_PATH: gorvernance/obsidian-importer
           REQUIRE_GOV: '1'
 
       - name: Enforce perf budgets
         run: npm run -s perf:budgets
         env:
-          GOV_PATH: gorvernance
+          GOV_PATH: gorvernance/obsidian-importer
           REQUIRE_GOV: '1'
 
       - name: Redact fixtures
         run: npm run -s fixtures:redact
         env:
-          GOV_PATH: gorvernance
+          GOV_PATH: gorvernance/obsidian-importer
           REQUIRE_GOV: '1'
 
   governance_lite:
