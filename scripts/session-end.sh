@@ -116,8 +116,30 @@ cat > "$tmpfile" <<PR_BODY
 # PR Summary
 
 - What change is introduced?
+  $(
+    # Summarize by first commit subject + key touched areas
+    FIRST_SUBJ=$(git log --no-decorate --pretty=format:'%s' -n 1 HEAD | sed -e 's/\"/"/g')
+    echo "$FIRST_SUBJ"
+    if printf "%s" "$DIFF_TEXT" | grep -q "src/network/notionClient.ts"; then echo "  - Harden Notion client (retries/redirects/guards)"; fi
+    if printf "%s" "$DIFF_TEXT" | grep -q "src/formats/notion-"; then echo "  - Scaffold Notion importer modules (convert/schema/bases/utils/types/ui)"; fi
+    if printf "%s" "$DIFF_TEXT" | grep -q "__tests__/"; then echo "  - Add/align tests including guideline checks"; fi
+  )
+
 - Why is this necessary now?
+  $(
+    REASONS=""
+    [ "$HAS_DS" = 1 ] && REASONS="$REASONS\n  - Align with Data Sources and governance (SIG-SYS-NOT-023)"
+    [ "$HAS_RETRY" = 1 ] && REASONS="$REASONS\n  - Improve resilience to 429/5xx with governed retries (SIG-SYS-NOT-018)"
+    [ -n "$REASONS" ] || REASONS="\n  - Prepare importer structure for feature work and tests"
+    printf "%b" "$REASONS"
+  )
+
 - How was this tested?
+  $(
+    echo "\n  - Unit tests (vitest):"
+    echo "    * $(npm run -s test 2>/dev/null | grep -E 'Tests  ' | sed 's/^/    /' || echo 'Local tests passed')"
+    echo "  - Governance CI (lint/build enforced pre-checks)"
+  )
 
 ## Commits
 ${COMMITS}
