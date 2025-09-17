@@ -28,13 +28,13 @@ jobs:
       - name: Install dependencies (allow new dev deps)
         run: npm install
 
-      - name: Checkout governance (ava-sig/governance)
-        env:
-          TOKEN: ${{ secrets.GOV_REPO_PAT != '' && secrets.GOV_REPO_PAT || secrets.GITHUB_TOKEN }}
-        run: |
-          set -e
-          mkdir -p gorvernance
-          git clone --depth=1 https://x-access-token:${TOKEN}@github.com/ava-sig/governance.git gorvernance/obsidian-importer
+      - name: Checkout governance (ava-sig/governance via PAT)
+        uses: actions/checkout@v4
+        with:
+          repository: ava-sig/governance
+          ref: master
+          path: gorvernance/obsidian-importer
+          token: ${{ secrets.GOV_REPO_PAT }}
 
       - name: Glyph header check
         run: npm run -s check:glyph-header
