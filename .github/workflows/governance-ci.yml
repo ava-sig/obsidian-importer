@@ -32,7 +32,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ava-sig/governance
-          ref: master
           path: gorvernance/obsidian-importer
           token: ${{ secrets.GOV_REPO_PAT }}
 
