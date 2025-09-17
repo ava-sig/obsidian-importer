@@ -33,7 +33,7 @@ jobs:
         with:
           repository: ava-sig/governance
           path: gorvernance/obsidian-importer
-          token: ${{ secrets.GOV_REPO_PAT }}
+          token: ${{ secrets.GOV_REPO_PAT != '' && secrets.GOV_REPO_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Glyph header check
         run: npm run -s check:glyph-header
