@@ -10,6 +10,9 @@ import { OneNoteImporter } from './formats/onenote';
 import { RoamJSONImporter } from './formats/roam-json';
 import { TextbundleImporter } from './formats/textbundle';
 import { truncateText } from './util';
+import { NotionClient } from './network/notionClient';
+import { NotionApiImporter } from './formats/notion-api';
+import { normalizePath, PluginSettingTab } from 'obsidian';
 
 declare global {
 	interface Window {
@@ -18,12 +21,28 @@ declare global {
 	}
 }
 
+interface NotionApiSettings {
+	token?: string;
+	folder?: string;
+	dataSourceId?: string;
+	dryRun?: boolean;
+}
+
 interface ImporterDefinition {
 	name: string;
 	optionText: string;
 	helpPermalink: string;
 	formatDescription?: string;
 	importer: new (app: App, modal: Modal) => FormatImporter;
+}
+
+export interface ImporterData {
+	importers: {
+		onenote?: {
+			previouslyImportedIDs: string[];
+		};
+	};
+	notionApi?: NotionApiSettings;
 }
 
 
@@ -272,7 +291,7 @@ export default class ImporterPlugin extends Plugin {
 			},
 			'notion': {
 				name: 'Notion',
-				optionText: 'Notion (.zip)',
+				optionText: 'Notion',
 				importer: NotionImporter,
 				helpPermalink: 'import/notion',
 				formatDescription: 'Export your Notion workspace to HTML format.',
@@ -303,6 +322,20 @@ export default class ImporterPlugin extends Plugin {
 				new ImporterModal(this.app, this).open();
 			},
 		});
+
+		this.addCommand({
+			id: 'notion-import-sample',
+			name: 'Notion: Import sample data source',
+			callback: () => this.runNotionImport(),
+		});
+
+		this.addCommand({
+			id: 'notion-import-by-id',
+			name: 'Notion: Import by Data Source ID...',
+			callback: () => this.runNotionImportModal(),
+		});
+
+		this.addSettingTab(new NotionApiSettingTab(this.app, this));
 
 		this.registerObsidianProtocolHandler('importer-auth',
 			(data) => {
@@ -351,6 +384,129 @@ export default class ImporterPlugin extends Plugin {
 	 */
 	public registerAuthCallback(callback: AuthCallback): void {
 		this.authCallback = callback;
+	}
+
+	async runNotionImport(dataSourceId?: string): Promise<void> {
+		try {
+			const data = await this.loadData();
+			const settings = data.notionApi;
+
+			if (!settings?.token) {
+				new Notice('Please configure your Notion token in settings first.');
+				return;
+			}
+
+			const dsId = dataSourceId || settings.dataSourceId;
+			if (!dsId) {
+				new Notice('Please configure a Data Source ID in settings first.');
+				return;
+			}
+
+			const client = new NotionClient({ token: settings.token });
+			const isDryRun = settings.dryRun || false;
+			const files: Array<{path: string, content: string}> = [];
+
+			const writeFile = async (path: string, content: string) => {
+				if (isDryRun) {
+					files.push({ path, content });
+				}
+				else {
+					const filePath = normalizePath(path);
+					await this.app.vault.adapter.write(filePath, content);
+				}
+			};
+
+			const importer = new NotionApiImporter({
+				client,
+				folder: settings.folder || 'Notion',
+				writeFile,
+			});
+
+			new Notice(isDryRun ? 'Starting Notion dry run...' : 'Starting Notion import...');
+			await importer.run(dsId);
+
+			if (isDryRun) {
+				const first = files[0]?.path || 'N/A';
+				const last = files[files.length - 1]?.path || 'N/A';
+				new Notice(`Dry run complete: ${files.length} notes would be created. First: ${first}, Last: ${last}`);
+			}
+			else {
+				new Notice('Notion import completed successfully!');
+			}
+
+			// Save last used DS ID
+			if (dataSourceId && dataSourceId !== settings.dataSourceId) {
+				const updatedData = { ...data };
+				updatedData.notionApi = { ...settings, dataSourceId };
+				await this.saveData(updatedData);
+			}
+		}
+		catch (error) {
+			console.error('Notion import failed:', error);
+			new Notice(`Import failed: ${error.message || 'Unknown error'}`);
+		}
+	}
+
+	async runNotionImportModal(): Promise<void> {
+		const modal = new NotionImportModal(this.app, (dsId: string) => {
+			this.runNotionImport(dsId);
+		});
+		modal.open();
+	}
+}
+
+export class NotionImportModal extends Modal {
+	callback: (dsId: string) => void;
+
+	constructor(app: App, callback: (dsId: string) => void) {
+		super(app);
+		this.callback = callback;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.createEl('h2', { text: 'Import Notion Data Source' });
+
+		const inputContainer = contentEl.createDiv();
+		inputContainer.createEl('label', { text: 'Data Source ID:' });
+		const input = inputContainer.createEl('input', {
+			type: 'text',
+			placeholder: 'Enter Notion Data Source ID...',
+		});
+		input.style.width = '100%';
+		input.style.marginTop = '8px';
+
+		const buttonContainer = contentEl.createDiv();
+		buttonContainer.style.marginTop = '16px';
+		buttonContainer.style.display = 'flex';
+		buttonContainer.style.gap = '8px';
+
+		const importBtn = buttonContainer.createEl('button', { text: 'Import' });
+		importBtn.addEventListener('click', () => {
+			const dsId = input.value.trim();
+			if (dsId) {
+				this.callback(dsId);
+				this.close();
+			}
+			else {
+				new Notice('Please enter a Data Source ID');
+			}
+		});
+
+		const cancelBtn = buttonContainer.createEl('button', { text: 'Cancel' });
+		cancelBtn.addEventListener('click', () => this.close());
+
+		input.focus();
+		input.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') {
+				importBtn.click();
+			}
+		});
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
 	}
 }
 
@@ -467,5 +623,85 @@ export class ImporterModal extends Modal {
 		if (current) {
 			current.cancel();
 		}
+	}
+}
+
+export class NotionApiSettingTab extends PluginSettingTab {
+	plugin: ImporterPlugin;
+
+	constructor(app: App, plugin: ImporterPlugin) {
+		super(app, plugin);
+		this.plugin = plugin;
+	}
+
+	display(): void {
+		const { containerEl } = this;
+
+		containerEl.empty();
+
+		containerEl.createEl('h2', { text: 'Notion API Settings' });
+
+		new Setting(containerEl)
+			.setName('Notion Token')
+			.setDesc('Your Notion integration token (keep this secret)')
+			.addText(text => text
+				.setPlaceholder('secret_...')
+				.setValue('')
+				.onChange(async (value) => {
+					const data = await this.plugin.loadData();
+					if (!data.notionApi) data.notionApi = { token: '', folder: 'Notion', dataSourceId: '' };
+					data.notionApi.token = value;
+					await this.plugin.saveData(data);
+				}));
+
+		new Setting(containerEl)
+			.setName('Target Folder')
+			.setDesc('Folder in your vault where imported notes will be stored')
+			.addText(text => {
+				this.plugin.loadData().then(data => {
+					text.setValue(data.notionApi?.folder || 'Notion');
+				});
+				return text
+					.setPlaceholder('Notion')
+					.onChange(async (value) => {
+						const data = await this.plugin.loadData();
+						if (!data.notionApi) data.notionApi = { token: '', folder: 'Notion', dataSourceId: '' };
+						data.notionApi.folder = value || 'Notion';
+						await this.plugin.saveData(data);
+					});
+			});
+
+		new Setting(containerEl)
+			.setName('Data Source ID')
+			.setDesc('Notion Data Source ID for the sample import command')
+			.addText(text => {
+				this.plugin.loadData().then(data => {
+					text.setValue(data.notionApi?.dataSourceId || '');
+				});
+				return text
+					.setPlaceholder('Enter Data Source ID...')
+					.onChange(async (value) => {
+						const data = await this.plugin.loadData();
+						if (!data.notionApi) data.notionApi = { token: '', folder: 'Notion', dataSourceId: '' };
+						data.notionApi.dataSourceId = value;
+						await this.plugin.saveData(data);
+					});
+			});
+
+		new Setting(containerEl)
+			.setName('Dry Run Mode')
+			.setDesc('Preview import without creating files - shows summary of what would be imported')
+			.addToggle(toggle => {
+				this.plugin.loadData().then(data => {
+					toggle.setValue(data.notionApi?.dryRun || false);
+				});
+				return toggle
+					.onChange(async (value) => {
+						const data = await this.plugin.loadData();
+						if (!data.notionApi) data.notionApi = { token: '', folder: 'Notion', dataSourceId: '', dryRun: false };
+						data.notionApi.dryRun = value;
+						await this.plugin.saveData(data);
+					});
+			});
 	}
 }
