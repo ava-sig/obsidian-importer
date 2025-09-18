@@ -42,7 +42,19 @@ function getChangedFiles() {
 
 function shouldCheck(file) {
   const ext = path.extname(file).toLowerCase();
-  return exts.has(ext);
+  if (!exts.has(ext)) return false;
+
+  // Normalize to POSIX-style for stable comparison
+  const norm = file.split(path.sep).join('/');
+  const ourFiles = new Set([
+    'src/formats/notion-api.ts',
+    'src/formats/notion-convert.ts',
+    'src/formats/notion-schema.ts',
+    'src/network/notionClient.ts',
+    'tests/notion-api-run.spec.ts',
+    'scripts/preview-import.mjs',
+  ]);
+  return ourFiles.has(norm);
 }
 
 function hasGlyphHeader(file) {
