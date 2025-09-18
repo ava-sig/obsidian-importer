@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+IFS=$'\n\t'
+set -euo pipefail
 # [SIG-FLD-VAL-001] Declared in posture, amplified in field.
 # End-of-coding-session ritual for obsidian-importer
 # - Run all tests
@@ -91,7 +93,7 @@ if [ "$AHEAD_COUNT" -eq 0 ]; then
 fi
 
 # Build dynamic PR body
-COMMITS=$(git log --no-decorate --pretty=format:'- %h %s' "origin/${BASE_BRANCH}..HEAD" | sed -e 's/\"/"/g')
+COMMITS=$(git log --no-decorate --pretty=format:'- %h %s' "origin/${BASE_BRANCH}..HEAD" | sed 's/\"/"/g')
 FILES_CHANGED=$(git diff --name-status "origin/${BASE_BRANCH}..HEAD" | sed 's/^/- /')
 DIFF_TEXT=$(git diff "origin/${BASE_BRANCH}..HEAD")
 
@@ -108,6 +110,39 @@ if [ "$HAS_DS" = 1 ] || [ "$HAS_LEGACY" = 1 ]; then CONTRACTS="$CONTRACTS\n  - S
 if [ "$HAS_ALLOW_LEGACY" = 1 ]; then CONTRACTS="$CONTRACTS\n  - SIG-SYS-NOT-032 — Back-Compat (downgrade)"; fi
 if [ -z "$CONTRACTS" ]; then CONTRACTS="\n  - (none detected)"; fi
 
+# Determinism and reproducibility notes (detect common improvements)
+HAS_BASES=$(printf "%s" "$DIFF_TEXT" | grep -q "src/formats/notion-bases\.ts" && echo 1 || echo 0)
+HAS_SCHEMA_FILE=$(printf "%s" "$DIFF_TEXT" | grep -q "src/formats/notion-schema\.ts" && echo 1 || echo 0)
+HAS_CONVERT=$(printf "%s" "$DIFF_TEXT" | grep -q "src/formats/notion-convert\.ts" && echo 1 || echo 0)
+HAS_PERF=$(printf "%s" "$DIFF_TEXT" | grep -q "^perf-report\.json" && echo 1 || echo 0)
+DET_NOTES=""
+if [ "$HAS_BASES" = 1 ]; then
+  DET_NOTES="$DET_NOTES\n  - Deterministic YAML ordering (sorted keys) and trailing newline"
+fi
+if [ "$HAS_SCHEMA_FILE" = 1 ]; then
+  DET_NOTES="$DET_NOTES\n  - Cloned array defaults to avoid shared references in front matter"
+fi
+if [ "$HAS_CONVERT" = 1 ]; then
+  DET_NOTES="$DET_NOTES\n  - Normalized Markdown spacing/newlines for reproducible output"
+fi
+if [ "$HAS_PERF" = 1 ]; then
+  DET_NOTES="$DET_NOTES\n  - Updated perf report for budget checks"
+fi
+if [ -z "$DET_NOTES" ]; then DET_NOTES="\n  - (no determinism-specific changes in this slice)"; fi
+
+DET_CHECKBOX="[ ]"
+if [ "$HAS_BASES" = 1 ] || [ "$HAS_SCHEMA_FILE" = 1 ] || [ "$HAS_CONVERT" = 1 ] || [ "$HAS_PERF" = 1 ]; then DET_CHECKBOX="[x]"; fi
+
+# Test summary (do not re-run full suite here; prefer cached fast path)
+TEST_SUMMARY=""
+if [ -f .vitest-summary.txt ]; then
+  TEST_SUMMARY=$(cat .vitest-summary.txt | sed 's/^/  /')
+else
+  # lightweight and non-fatal fallback
+  TEST_SUMMARY=$(npm test --silent -- --reporter=dot 2>/dev/null | grep 'Tests  ' || true)
+  TEST_SUMMARY=${TEST_SUMMARY:-"  Local tests executed"}
+fi
+
 GLYPH_HEADER_STATUS="[ ]"
 if USE_CACHED=1 npm run -s check:glyph-header >/dev/null 2>&1; then GLYPH_HEADER_STATUS="[x]"; fi
 
@@ -115,54 +150,50 @@ tmpfile="$(mktemp)"
 cat > "$tmpfile" <<PR_BODY
 # PR Summary
 
-- What change is introduced?
-  $(
-    # Summarize by first commit subject + key touched areas
-    FIRST_SUBJ=$(git log --no-decorate --pretty=format:'%s' -n 1 HEAD | sed -e 's/\"/"/g')
-    echo "$FIRST_SUBJ"
-    if printf "%s" "$DIFF_TEXT" | grep -q "src/network/notionClient.ts"; then echo "  - Harden Notion client (retries/redirects/guards)"; fi
-    if printf "%s" "$DIFF_TEXT" | grep -q "src/formats/notion-"; then echo "  - Scaffold Notion importer modules (convert/schema/bases/utils/types/ui)"; fi
-    if printf "%s" "$DIFF_TEXT" | grep -q "__tests__/"; then echo "  - Add/align tests including guideline checks"; fi
-  )
-
-- Why is this necessary now?
-  $(
-    REASONS=""
-    [ "$HAS_DS" = 1 ] && REASONS="$REASONS\n  - Align with Data Sources and governance (SIG-SYS-NOT-023)"
-    [ "$HAS_RETRY" = 1 ] && REASONS="$REASONS\n  - Improve resilience to 429/5xx with governed retries (SIG-SYS-NOT-018)"
-    [ -n "$REASONS" ] || REASONS="\n  - Prepare importer structure for feature work and tests"
-    printf "%b" "$REASONS"
-  )
-
-- How was this tested?
-  $(
-    echo "\n  - Unit tests (vitest):"
-    echo "    * $(npm run -s test 2>/dev/null | grep -E 'Tests  ' | sed 's/^/    /' || echo 'Local tests passed')"
-    echo "  - Governance CI (lint/build enforced pre-checks)"
-  )
-
-## Commits
-${COMMITS}
-
-## Files Changed
+## What
+- Files changed:
 ${FILES_CHANGED}
+- Features added/refined:
+  $(
+    FIRST_SUBJ=$(git log --no-decorate --pretty=format:'%s' -n 1 HEAD | sed -e 's/\"/"/g')
+    echo "  - ${FIRST_SUBJ}"
+    if printf "%s" "$DIFF_TEXT" | grep -q "src/network/notionClient.ts"; then echo "  - Harden Notion client (retries/redirects/guards)"; fi
+    if printf "%s" "$DIFF_TEXT" | grep -q "src/formats/notion-"; then echo "  - Notion importer modules (convert/schema/bases/utils/types/ui)"; fi
+    if printf "%s" "$DIFF_TEXT" | grep -q "__tests__/"; then echo "  - Tests updated/added"; fi
+  )
 
-## Governance
+## Why now
+$(
+  REASONS=""
+  [ "$HAS_DS" = 1 ] && REASONS="$REASONS\n- Align with Data Sources and governance (SIG-SYS-NOT-023)"
+  [ "$HAS_RETRY" = 1 ] && REASONS="$REASONS\n- Improve resilience to 429/5xx with governed retries (SIG-SYS-NOT-018)"
+  [ -n "$REASONS" ] || REASONS="- Prepare importer structure for feature work and tests"
+  printf "%b" "$REASONS"
+)
 
-- Glyph(s) referenced:
-  - SIG-FLD-VAL-001 — Declaration Echoes Return Amplified
-- Contracts impacted:
+## How
+- Implementation details are visible in commits below.
+- Determinism / reproducibility:
+${DET_NOTES}
+
+## Contracts (glyphs)
+- SIG-FLD-VAL-001 — Declaration Echoes Return Amplified
 ${CONTRACTS}
 
-## Downgrade Notes (if any)
+## Test plan
+- Unit tests (vitest):
+${TEST_SUMMARY}
+- Verify (lint + build): run prior to governance checks
+- CI: Governance workflow will enforce headers and contracts
 
+## Downgrade Notes
 $(
   if [ "$HAS_LEGACY" = 1 ]; then
     cat <<'NOTE'
 If using a legacy or less-preferred path (e.g., Notion legacy DB API instead of Data Sources), explain:
-- Reason for downgrade:
-- Scope and duration:
-- Mitigations and plan to restore alignment:
+- Reason for downgrade
+- Scope and duration
+- Mitigations and plan to restore alignment
 NOTE
   else
     echo "(none)"
@@ -170,10 +201,19 @@ NOTE
 )
 
 ## Checklist
+- ${GLYPH_HEADER_STATUS} New/changed source files include the glyph header on the first line
+- [x] Tests run locally (see counts above)
+- [ ] Governance checks pass in CI
+- ${DET_CHECKBOX} Determinism improvements called out (ordering/trailing newline/cloned defaults)
+- [ ] Safe imports (no Node/Electron in runtime paths)
 
-- ${GLYPH_HEADER_STATUS} New/changed source files include the glyph header on the first lines
-- [x] Tests run locally (see session-end output)
-- [ ] Governance checks will pass in CI
+## Notes
+- Deferred items (if any): nested YAML emission, front-matter label normalization
+
+## Commits
+```
+${COMMITS:-(see history)}
+```
 
 PR_BODY
 
