@@ -91,33 +91,53 @@ export class NotionApiImporter {
 	}
 
 	private getPageTitle(page: NotionPage, schema: NotionSchema): string | null {
-		const titleProp = Object.entries(schema.properties || {}).find(
-			([, prop]: [string, any]) => prop.type === 'title'
-		);
-		if (!titleProp) return null;
-
-		const [titleKey] = titleProp;
-		const titleValue = page.properties?.[titleKey];
-		if (!titleValue?.title?.[0]?.plain_text) return null;
-
-		return titleValue.title[0].plain_text;
+		try {
+			const props = (schema as any)?.properties ?? {};
+			const titleKey = Object.keys(props).find(k => (props as any)[k]?.type === 'title');
+			if (!titleKey) return null;
+			const pv: any = (page as any)?.properties?.[titleKey];
+			const arr: any[] = pv?.title ?? pv?.rich_text ?? [];
+			if (!Array.isArray(arr) || arr.length === 0) return null;
+			const first = arr.find((x: any) => ((x?.plain_text ?? x?.text?.content ?? '').trim().length > 0)) ?? arr[0];
+			const s = (first?.plain_text ?? first?.text?.content ?? '').trim()
+				|| arr.map((x: any) => (x?.plain_text ?? x?.text?.content ?? '')).join('').trim();
+			return s || null;
+		}
+		catch {
+			return null;
+		}
 	}
 
 	private toYaml(obj: Record<string, unknown>): string {
 		const keys = Object.keys(obj).sort();
-		const lines = keys.map(key => {
-			const value = obj[key];
-			if (typeof value === 'string') {
-				return `${key}: ${value}`;
-			}
-			return `${key}: ${JSON.stringify(value)}`;
-		});
+		const lines: string[] = [];
+		for (const k of keys) {
+			lines.push(`${k}: ${this.yamlScalar((obj as any)[k])}`);
+		}
 		return lines.join('\n') + '\n';
 	}
 
+	private yamlScalar(v: unknown): string {
+		if (v === null || v === undefined) return '""';
+		if (Array.isArray(v)) return v.length ? `[${v.map(x => this.yamlScalar(x)).join(', ')}]` : '[]';
+		switch (typeof v) {
+			case 'number':
+			case 'boolean': return String(v);
+			default: {
+				const s = String(v);
+				return /^[A-Za-z0-9 _.-]+$/.test(s) ? s : `"${s.replace(/\"/g, '"').replace(/"/g, '\\"')}"`;
+			}
+		}
+	}
+
 	private safeFilename(name: string): string {
-		const safe = name.replace(/[<>:"/\\|?*]/g, '-').replace(/\s+/g, ' ').trim();
-		return safe.length > 120 ? safe.slice(0, 120).trim() : safe;
+		let s = String(name || '').trim() || 'untitled';
+		s = s.replace(/[<>:\"/\\|?*\u0000-\u001F]/g, '-');
+		s = s.replace(/\s+/g, ' ');
+		s = s.replace(/\.{2,}/g, '.');
+		s = s.replace(/[. ]+$/g, '');
+		if (!s) s = 'untitled';
+		return s.length > 120 ? s.slice(0, 120).trim() : s;
 	}
 
 }

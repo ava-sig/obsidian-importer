@@ -18,9 +18,9 @@ async function main() {
 		// Ensure output directory exists
 		await fs.mkdir(OUT_DIR, { recursive: true });
 
-		// Dynamic imports for ES modules
-		const { NotionClient } = await import('../src/network/notionClient.js');
-		const { NotionApiImporter } = await import('../src/formats/notion-api.js');
+		// Dynamic imports for compiled ES modules (built to dist/)
+		const { NotionClient } = await import('../dist/network/notionClient.js');
+		const { NotionApiImporter } = await import('../dist/formats/notion-api.js');
 
 		const client = new NotionClient({ token: NOTION_TOKEN });
 		const writeFile = async (filePath, content) => {

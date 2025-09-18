@@ -230,20 +230,13 @@ export class ImportContext {
 	}
 }
 
-export interface ImporterData {
-	importers: {
-		onenote?: {
-			previouslyImportedIDs: string[];
-		};
-	};
-}
-
 const DEFAULT_DATA: ImporterData = {
 	importers: {
 		onenote: {
 			previouslyImportedIDs: [],
 		},
 	},
+	notionApi: { token: '', folder: 'Notion', dataSourceId: '', dryRun: false },
 };
 
 export default class ImporterPlugin extends Plugin {
