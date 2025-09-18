@@ -2,8 +2,75 @@
 import { describe, it, expect } from 'vitest';
 import { buildBaseYaml } from '../src/formats/notion-bases';
 
-describe.skip('Notion Bases', () => {
-	it('builds base YAML (to be implemented)', () => {
-		expect(typeof buildBaseYaml).toBe('function');
+describe('Notion Bases', () => {
+	it('emits minimal base YAML with a single view', () => {
+		const yaml = buildBaseYaml(
+			{ id: 'ds123', name: 'Demo Base' },
+			[
+				{ id: 'v1', name: 'All', type: 'table' },
+			]
+		);
+		expect(yaml.trim()).toBe(
+			[
+				'base:',
+				'  id: ds123',
+				'  name: Demo Base',
+				'views:',
+				'  - id: v1',
+				'    name: All',
+				'    type: table',
+				'    filters: []',
+				'    sorts: []',
+				'    groups: []',
+			].join('\n')
+		);
+	});
+
+	it('emits multiple views and preserves order', () => {
+		const yaml = buildBaseYaml(
+			{ id: 'dsX', name: 'Ordered' },
+			[
+				{ id: 'a', name: 'First', type: 'list' },
+				{ id: 'b', name: 'Second', type: 'board' },
+			]
+		);
+		expect(yaml.trim()).toBe(
+			[
+				'base:',
+				'  id: dsX',
+				'  name: Ordered',
+				'views:',
+				'  - id: a',
+				'    name: First',
+				'    type: list',
+				'    filters: []',
+				'    sorts: []',
+				'    groups: []',
+				'  - id: b',
+				'    name: Second',
+				'    type: board',
+				'    filters: []',
+				'    sorts: []',
+				'    groups: []',
+			].join('\n')
+		);
+	});
+
+	it('emits filters/sorts/groups when provided', () => {
+		const yaml = buildBaseYaml(
+			{ id: 'dsF', name: 'Filters' },
+			[
+				{ id: 'v', name: 'WithMeta', type: 'table',
+					filters: [{ property: 'Status', op: 'is', value: 'Open' }],
+					sorts: [{ property: 'Due', direction: 'ascending' }],
+					groups: [{ property: 'Assignee' }],
+				},
+			]
+		);
+		expect(yaml).toContain('filters:');
+		expect(yaml).toContain('sorts:');
+		expect(yaml).toContain('groups:');
+		expect(yaml).toContain('property: Status');
+		expect(yaml).toContain('direction: ascending');
 	});
 });

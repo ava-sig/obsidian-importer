@@ -31,6 +31,9 @@ jobs:
       - name: Verify (lint + build)
         run: npm run -s verify
 
+      - name: Verify (lint + build)
+        run: npm run -s verify
+
       - name: Checkout governance (ava-sig/governance via PAT)
         uses: actions/checkout@v4
         with:
