@@ -27,7 +27,8 @@ export function buildBaseYaml(config: NotionBaseConfig, views: NotionBaseView[])
 		dumpArray(lines, 'sorts', v.sorts);
 		dumpArray(lines, 'groups', v.groups);
 	}
-	return lines.join('\n');
+	// ensure trailing newline for cleaner diffs/tools
+	return lines.join('\n') + '\n';
 }
 
 function escapeScalar(s: string): string {
@@ -45,9 +46,18 @@ function dumpArray(lines: string[], name: string, arr?: Record<string, unknown>[
 	lines.push(`    ${name}:`);
 	for (const item of arr) {
 		lines.push(`      -`);
-		for (const k of Object.keys(item)) {
+		// deterministic key order → stable YAML diffs
+		const keys = Object.keys(item).sort();
+		for (const k of keys) {
 			const v = (item as any)[k];
-			const scalar = typeof v === 'string' ? escapeScalar(v) : typeof v === 'number' || typeof v === 'boolean' ? String(v) : escapeScalar(JSON.stringify(v));
+			let scalar: string;
+			if (typeof v === 'string') scalar = escapeScalar(v);
+			else if (typeof v === 'number' || typeof v === 'boolean') scalar = String(v);
+			else if (v == null) scalar = '""';
+			else {
+				// keep nested objects simple as JSON for now; future: emit nested YAML
+				scalar = escapeScalar(JSON.stringify(v));
+			}
 			lines.push(`        ${k}: ${scalar}`);
 		}
 	}
