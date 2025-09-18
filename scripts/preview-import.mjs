@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// [SIG-FLD-VAL-001] Declared in posture, amplified in field.
 
 import { promises as fs } from 'fs';
 import path from 'path';
