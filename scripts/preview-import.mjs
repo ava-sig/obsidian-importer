@@ -19,8 +19,8 @@ async function main() {
 		await fs.mkdir(OUT_DIR, { recursive: true });
 
 		// Dynamic imports for compiled ES modules (built to dist/)
-		const { NotionClient } = await import('../dist/network/notionClient.js');
-		const { NotionApiImporter } = await import('../dist/formats/notion-api.js');
+		const { NotionClient } = await import('../src/network/notionClient.ts');
+		const { NotionApiImporter } = await import('../src/formats/notion-api.ts');
 
 		const client = new NotionClient({ token: NOTION_TOKEN });
 		const writeFile = async (filePath, content) => {
@@ -38,9 +38,9 @@ async function main() {
 
 		console.log(`Starting Notion import from Data Source: ${NOTION_DS_ID}`);
 		console.log(`Output directory: ${OUT_DIR}`);
-		
+
 		await importer.run(NOTION_DS_ID);
-		
+
 		console.log('Import completed successfully!');
 		console.log(`Check ${OUT_DIR} for imported files`);
 	} catch (error) {
