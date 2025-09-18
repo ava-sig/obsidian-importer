@@ -23,9 +23,9 @@ export function buildBaseYaml(config: NotionBaseConfig, views: NotionBaseView[])
 		lines.push(`  - id: ${escapeScalar(v.id)}`);
 		lines.push(`    name: ${escapeScalar(v.name)}`);
 		lines.push(`    type: ${escapeScalar(v.type)}`);
-		lines.push(`    filters: []`);
-		lines.push(`    sorts: []`);
-		lines.push(`    groups: []`);
+		dumpArray(lines, 'filters', v.filters);
+		dumpArray(lines, 'sorts', v.sorts);
+		dumpArray(lines, 'groups', v.groups);
 	}
 	return lines.join('\n');
 }
@@ -35,4 +35,20 @@ function escapeScalar(s: string): string {
 	if (/^[A-Za-z0-9_ .-]+$/.test(s)) return s;
 	// fallback to double-quoted and escape quotes
 	return '"' + s.replace(/"/g, '\\"') + '"';
+}
+
+function dumpArray(lines: string[], name: string, arr?: Record<string, unknown>[]) {
+	if (!arr || arr.length === 0) {
+		lines.push(`    ${name}: []`);
+		return;
+	}
+	lines.push(`    ${name}:`);
+	for (const item of arr) {
+		lines.push(`      -`);
+		for (const k of Object.keys(item)) {
+			const v = (item as any)[k];
+			const scalar = typeof v === 'string' ? escapeScalar(v) : typeof v === 'number' || typeof v === 'boolean' ? String(v) : escapeScalar(JSON.stringify(v));
+			lines.push(`        ${k}: ${scalar}`);
+		}
+	}
 }

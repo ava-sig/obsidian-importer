@@ -55,4 +55,22 @@ describe('Notion Bases', () => {
 			].join('\n')
 		);
 	});
+
+	it('emits filters/sorts/groups when provided', () => {
+		const yaml = buildBaseYaml(
+			{ id: 'dsF', name: 'Filters' },
+			[
+				{ id: 'v', name: 'WithMeta', type: 'table',
+					filters: [{ property: 'Status', op: 'is', value: 'Open' }],
+					sorts: [{ property: 'Due', direction: 'ascending' }],
+					groups: [{ property: 'Assignee' }],
+				},
+			]
+		);
+		expect(yaml).toContain('filters:');
+		expect(yaml).toContain('sorts:');
+		expect(yaml).toContain('groups:');
+		expect(yaml).toContain('property: Status');
+		expect(yaml).toContain('direction: ascending');
+	});
 });

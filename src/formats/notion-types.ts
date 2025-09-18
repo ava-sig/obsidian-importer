@@ -25,6 +25,9 @@ export interface NotionBaseView {
 	id: string;
 	name: string;
 	type: 'table' | 'board' | 'list' | 'calendar' | 'gallery';
+	filters?: Record<string, unknown>[];
+	sorts?: Record<string, unknown>[];
+	groups?: Record<string, unknown>[];
 }
 
 export interface NotionBaseConfig {
